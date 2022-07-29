@@ -1,5 +1,8 @@
+import os
 import re
 from bs4 import BeautifulSoup
+from lxml import etree
+from lxml.builder import unicode
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -8,7 +11,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 
-url = 'https://www.sciencedirect.com/science/article/pii/S2588840421000019'
+
+url = 'https://www.sciencedirect.com/science/article/pii/S0749641918304856'
 # url = 'https://www.tuhh.de/MathJax/test/sample-tex.html'
 expr_list = []
 
@@ -48,6 +52,15 @@ def scrape(soup):
     return False
 
 
+def mml2tex(expr):
+    xslt_file = os.path.join('Converter', 'mmltex.xsl')
+    dom = etree.fromstring(expr)
+    xslt = etree.parse(xslt_file)
+    transform = etree.XSLT(xslt)
+    newdom = transform(dom)
+    return unicode(newdom)
+
+
 def get_expressions():
     if expr_list:
         for idx, expr in enumerate(expr_list):
@@ -59,4 +72,10 @@ def get_expressions():
 
 soup = parse(url)
 scrape(soup)
-get_expressions()
+
+for expr in expr_list:
+    print('MathML: {}'.format(expr))
+    print('TeX: {}'.format(mml2tex(expr)))
+    print('')
+
+# get_expressions()
