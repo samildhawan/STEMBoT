@@ -50,8 +50,11 @@ class Scraper:
         driver.get(self.url)
 
         # wait
-        wait = WebDriverWait(driver, timeout=10)
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#MathJax-Element-1-Frame")))
+        try:
+            wait = WebDriverWait(driver, timeout=10)
+            wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#MathJax-Element-1-Frame")))
+        except:
+            print('Timeout.')
 
         source = driver.page_source
 
@@ -120,9 +123,10 @@ class Scraper:
         self.scrape_exprs()
 
         paper_id = self.url.split('/')[-1]
-        with open('{}.txt'.format(paper_id), 'w', encoding='utf-8') as f:
+        with open('scraped_txt\\{}.txt'.format(paper_id), 'w', encoding='utf-8') as f:
             f.write('Title: {}\n'.format(self.title))
             f.write('Authors: {}\n'.format(', '.join(self.authors)))
+            f.write('URL: {}\n'.format(self.url))
             f.write('Math Expressions: \n')
 
             for expr in self.expr_list:
