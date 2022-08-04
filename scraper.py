@@ -1,6 +1,7 @@
 import os
 import re
 from bs4 import BeautifulSoup
+from collections import OrderedDict
 from lxml import etree
 from lxml.builder import unicode
 from selenium import webdriver
@@ -16,9 +17,13 @@ class Scraper:
         self.url = url
         self.usr_data_dir = usr_data_dir
         self.soup = None
-        self.title = None
-        self.authors = []
         self.expr_list = []
+        self.info = OrderedDict({
+            'title': None,
+            'authors': [],
+            'url': url,
+            'exprs': []
+        })
 
 
     def is_expr(self, expr):
@@ -64,76 +69,71 @@ class Scraper:
 
 
     def scrape_title(self):
-        self.title = self.soup.find('meta', {'name': 'citation_title'})['content']
+        if not self.soup:
+            raise NameError('The url is not parsed.')
+
+        self.info['title'] = self.soup.find('meta', {'name': 'citation_title'})['content']
 
 
     def scrape_authors(self):
+        if not self.soup:
+            raise NameError('The url is not parsed.')
+
         authors_first = self.soup.find("div", {"class": "AuthorGroups"}).findAll("span", {"class": "given-name"})
         authors_last = self.soup.find("div", {"class": "AuthorGroups"}).findAll("span", {"class": "surname"})
         total_authors = len(authors_first)
 
-        for i in range(total_authors):
-            self.authors.append('{fn} {ln}'.format(fn=authors_first[i].contents[0], ln=authors_last[i].contents[0]))
+        if total_authors:
+            for i in range(total_authors):
+                self.info['authors'].append('{fn} {ln}'.format(fn=authors_first[i].contents[0], ln=authors_last[i].contents[0]))
+        else:
+            self.info['authors'] = None
 
 
     def scrape_exprs(self):
         if not self.soup:
             raise NameError('The url is not parsed.')
-        # found = soup.find_all('script', attrs={'type': 'math/tex; mode=display'})
-        # found = soup.find_all('script', attrs={'id': 'MathJax-Element-a'})
-        # found = soup.find_all('script', attrs={'id': 'MathJax-Element-1'})
-        found = self.soup.find_all('script', attrs={'id': re.compile(r'^MathJax')})
 
-        if found:
-            return_value = True
+        exprs = self.soup.find_all('script', attrs={'id': re.compile(r'^MathJax')})
 
-            for expr in found:
-                self.expr_list.append(expr.string)
-
-            return True
-
-        return False
+        if exprs:
+            for expr in exprs:
+                if self.is_expr(self.mml2tex(expr.string)):
+                    self.info['exprs'].append(self.mml2tex(expr.string))
+        else:
+            self.info['exprs'] = None
 
 
     def get_title(self):
-        print(self.title)
+        return self.info['title']
 
 
     def get_authors(self):
-        print(self.authors)
+        return self.info['authors']
 
 
     def get_exprs(self):
-        idx = 1
-        if self.expr_list:
-            for expr in self.expr_list:
-                expr = self.mml2tex(expr)
-
-                if self.is_expr(expr):
-                    print('Expression {idx}: {expr}'.format(idx=idx, expr=expr))
-                    idx += 1
-
-        else:
-            print('No expressions were scraped')
+        return self.info['exprs']
 
 
     def generate_txt(self):
-        self.scrape_title()
-        self.scrape_authors()
-        self.scrape_exprs()
-
         paper_id = self.url.split('/')[-1]
         with open('scraped_txt\\{}.txt'.format(paper_id), 'w', encoding='utf-8') as f:
-            f.write('Title: {}\n'.format(self.title))
-            f.write('Authors: {}\n'.format(', '.join(self.authors)))
+            f.write('Title: {}\n'.format(self.get_title()))
+            f.write('Authors: {}\n'.format(', '.join(self.get_authors())))
             f.write('URL: {}\n'.format(self.url))
             f.write('Math Expressions: \n')
 
-            for expr in self.expr_list:
-                expr = self.mml2tex(expr)
+            for expr in self.get_exprs():
+                f.write('{}\n'.format(expr))
 
-                if self.is_expr(expr):
-                    f.write('{}\n'.format(expr))
+
+    def scrape(self):
+        self.scrape_title()
+        self.scrape_authors()
+        self.scrape_exprs()
+        self.generate_txt()
+        return self.info
 
 
 
@@ -151,4 +151,4 @@ scraper.parse()
 # scraper.scrape_exprs()
 # scraper.get_exprs()
 
-scraper.generate_txt()
+print(scraper.scrape())
