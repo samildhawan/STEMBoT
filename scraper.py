@@ -22,7 +22,8 @@ class Scraper:
             'title': None,
             'authors': [],
             'url': url,
-            'exprs': []
+            'mathml_exprs': [],
+            'tex_exprs': []
         })
 
 
@@ -99,9 +100,11 @@ class Scraper:
         if exprs:
             for expr in exprs:
                 if self.is_expr(self.mml2tex(expr.string)):
-                    self.info['exprs'].append(self.mml2tex(expr.string))
+                    self.info['mathml_exprs'].append(expr.string)
+                    self.info['tex_exprs'].append(self.mml2tex(expr.string))
         else:
-            self.info['exprs'] = None
+            self.info['mathml_exprs'] = None
+            self.info['tex_exprs'] = None
 
 
     def get_title(self):
@@ -112,8 +115,12 @@ class Scraper:
         return self.info['authors']
 
 
-    def get_exprs(self):
-        return self.info['exprs']
+    def get_mathml_exprs(self):
+        return self.info['mathml_exprs']
+
+
+    def get_tex_exprs(self):
+        return self.info['tex_exprs']
 
 
     def generate_txt(self):
@@ -122,9 +129,13 @@ class Scraper:
             f.write('Title: {}\n'.format(self.get_title()))
             f.write('Authors: {}\n'.format(', '.join(self.get_authors())))
             f.write('URL: {}\n'.format(self.url))
-            f.write('Math Expressions: \n')
 
-            for expr in self.get_exprs():
+            f.write('Math Expressions in MathML: \n')
+            for expr in self.get_mathml_exprs():
+                f.write('{}\n'.format(expr))
+
+            f.write('Math Expressions in TeX: \n')
+            for expr in self.get_tex_exprs():
                 f.write('{}\n'.format(expr))
 
 
