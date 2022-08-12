@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from collections import OrderedDict
 from lxml import etree
 from lxml.builder import unicode
+from py_asciimath.translator.translator import Tex2ASCIIMath
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -23,7 +24,8 @@ class Scraper:
             'authors': [],
             'url': url,
             'mathml_exprs': [],
-            'tex_exprs': []
+            'tex_exprs': [],
+            'ascii_exprs': []
         })
 
 
@@ -96,15 +98,20 @@ class Scraper:
             raise NameError('The url is not parsed.')
 
         exprs = self.soup.find_all('script', attrs={'id': re.compile(r'^MathJax')})
+        # tex2ascii = Tex2ASCIIMath()
 
         if exprs:
             for expr in exprs:
-                if self.is_expr(self.mml2tex(expr.string)):
-                    self.info['mathml_exprs'].append(expr.string)
-                    self.info['tex_exprs'].append(self.mml2tex(expr.string))
+                mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + expr.string[6:]
+                tex_expr = self.mml2tex(mathml_expr).replace(r'\phantom{\rule{0.25em}{0ex}}', '')
+                if self.is_expr(tex_expr):
+                    self.info['mathml_exprs'].append(mathml_expr)
+                    self.info['tex_exprs'].append(tex_expr)
+                    # self.info['ascii_exprs'].append(tex2ascii.translate(tex_expr))
         else:
             self.info['mathml_exprs'] = None
             self.info['tex_exprs'] = None
+            # self.info['ascii_exprs'] = None
 
 
     def get_title(self):
@@ -123,6 +130,10 @@ class Scraper:
         return self.info['tex_exprs']
 
 
+    def get_ascii_exprs(self):
+        return self.info['ascii_exprs']
+
+
     def generate_txt(self):
         paper_id = self.url.split('/')[-1]
         with open('scraped_txt\\{}.txt'.format(paper_id), 'w', encoding='utf-8') as f:
@@ -137,6 +148,10 @@ class Scraper:
             f.write('Math Expressions in TeX: \n')
             for expr in self.get_tex_exprs():
                 f.write('{}\n'.format(expr))
+
+            # f.write('Math Expressions in ASCII: \n')
+            # for expr in self.get_ascii_exprs():
+            #     f.write('{}\n'.format(expr))
 
 
     def scrape(self):
@@ -162,4 +177,15 @@ scraper.parse()
 # scraper.scrape_exprs()
 # scraper.get_exprs()
 
-print(scraper.scrape())
+scraper.scrape()
+
+
+tex2ascii = Tex2ASCIIMath(log=False)
+for idx, expr in enumerate(scraper.get_tex_exprs()):
+    print(idx, expr)
+
+    try:
+        print(tex2ascii.translate(expr))
+    except Exception as e:
+        print('WRONG!!!!!!!!!')
+        # print(e)
