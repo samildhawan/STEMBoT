@@ -1,3 +1,4 @@
+import os
 import re
 from bs4 import BeautifulSoup
 from collections import OrderedDict
@@ -134,6 +135,9 @@ class Scraper:
 
     def _generate_txt(self):
         paper_id = self.url.split('/')[-1]
+        if not os.path.exists('scraped_txt'):
+            os.mkdir('scraped_txt')
+
         with open('scraped_txt\\{}.txt'.format(paper_id), 'w', encoding='utf-8') as f:
             f.write('Title: {}\n'.format(self.get_title()))
             f.write('Authors: {}\n'.format(', '.join(self.get_authors())))
