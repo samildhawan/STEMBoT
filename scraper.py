@@ -1,10 +1,7 @@
-import os
 import re
 from bs4 import BeautifulSoup
 from collections import OrderedDict
-from lxml import etree
-from lxml.builder import unicode
-from py_asciimath.translator.translator import Tex2ASCIIMath
+from converter import Converter
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -18,6 +15,7 @@ class Scraper:
         self.url = url
         self.usr_data_dir = usr_data_dir
         self.soup = None
+        self.converter = Converter()
         self.expr_list = []
         self.info = OrderedDict({
             'title': None,
@@ -29,8 +27,8 @@ class Scraper:
         })
 
 
-    def is_expr(self, expr):
-        signs = ['=', '<', '>', '≠', '≤', '≥']
+    def _is_expr(self, expr):
+        signs = ['=', '<', '>', '≠', '≤', '≥', r'\le', r'\leq', r'\leqq', r'\leqslant', r'\ge', r'\geq', r'\geqq', r'\geqslant']
         for sign in signs:
             if sign in expr:
                 return True
@@ -38,13 +36,13 @@ class Scraper:
         return False
 
 
-    def mml2tex(self, expr):
-        xslt_file = os.path.join('Converter', 'mmltex.xsl')
-        dom = etree.fromstring(expr)
-        xslt = etree.parse(xslt_file)
-        transform = etree.XSLT(xslt)
-        newdom = transform(dom)
-        return unicode(newdom)
+    # def _mml2tex(self, expr):
+    #     xslt_file = os.path.join('mml2tex', 'mmltex.xsl')
+    #     dom = etree.fromstring(expr)
+    #     xslt = etree.parse(xslt_file)
+    #     transform = etree.XSLT(xslt)
+    #     newdom = transform(dom)
+    #     return unicode(newdom)
 
 
     def parse(self):
@@ -61,7 +59,7 @@ class Scraper:
         try:
             wait = WebDriverWait(driver, timeout=10)
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#MathJax-Element-1-Frame")))
-        except:
+        except Exception as e:
             print('Timeout.')
 
         source = driver.page_source
@@ -71,14 +69,14 @@ class Scraper:
         self.soup = BeautifulSoup(source, "html.parser")
 
 
-    def scrape_title(self):
+    def _scrape_title(self):
         if not self.soup:
             raise NameError('The url is not parsed.')
 
         self.info['title'] = self.soup.find('meta', {'name': 'citation_title'})['content']
 
 
-    def scrape_authors(self):
+    def _scrape_authors(self):
         if not self.soup:
             raise NameError('The url is not parsed.')
 
@@ -93,7 +91,7 @@ class Scraper:
             self.info['authors'] = None
 
 
-    def scrape_exprs(self):
+    def _scrape_exprs(self):
         if not self.soup:
             raise NameError('The url is not parsed.')
 
@@ -103,15 +101,15 @@ class Scraper:
         if exprs:
             for expr in exprs:
                 mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + expr.string[6:]
-                tex_expr = self.mml2tex(mathml_expr).replace(r'\phantom{\rule{0.25em}{0ex}}', '')
-                if self.is_expr(tex_expr):
+                tex_expr = self.converter.mml2tex(mathml_expr)
+                if self._is_expr(tex_expr):
                     self.info['mathml_exprs'].append(mathml_expr)
                     self.info['tex_exprs'].append(tex_expr)
-                    # self.info['ascii_exprs'].append(tex2ascii.translate(tex_expr))
+                    self.info['ascii_exprs'].append(self.converter.tex2ascii(tex_expr))
         else:
             self.info['mathml_exprs'] = None
             self.info['tex_exprs'] = None
-            # self.info['ascii_exprs'] = None
+            self.info['ascii_exprs'] = None
 
 
     def get_title(self):
@@ -134,7 +132,7 @@ class Scraper:
         return self.info['ascii_exprs']
 
 
-    def generate_txt(self):
+    def _generate_txt(self):
         paper_id = self.url.split('/')[-1]
         with open('scraped_txt\\{}.txt'.format(paper_id), 'w', encoding='utf-8') as f:
             f.write('Title: {}\n'.format(self.get_title()))
@@ -149,21 +147,21 @@ class Scraper:
             for expr in self.get_tex_exprs():
                 f.write('{}\n'.format(expr))
 
-            # f.write('Math Expressions in ASCII: \n')
-            # for expr in self.get_ascii_exprs():
-            #     f.write('{}\n'.format(expr))
+            f.write('Math Expressions in ASCII: \n')
+            for expr in self.get_ascii_exprs():
+                f.write('{}\n'.format(expr))
 
 
     def scrape(self):
-        self.scrape_title()
-        self.scrape_authors()
-        self.scrape_exprs()
-        self.generate_txt()
+        self._scrape_title()
+        self._scrape_authors()
+        self._scrape_exprs()
+        self._generate_txt()
         return self.info
 
 
 
-scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S2588840421000019',
+scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0749641918304856',
                   usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
 
 scraper.parse()
@@ -177,15 +175,16 @@ scraper.parse()
 # scraper.scrape_exprs()
 # scraper.get_exprs()
 
-scraper.scrape()
+print(scraper.scrape())
 
-
-tex2ascii = Tex2ASCIIMath(log=False)
-for idx, expr in enumerate(scraper.get_tex_exprs()):
-    print(idx, expr)
-
-    try:
-        print(tex2ascii.translate(expr))
-    except Exception as e:
-        print('WRONG!!!!!!!!!')
-        # print(e)
+# for idx, expr in enumerate(scraper.get_tex_exprs()):
+#     print(idx, expr)
+#
+#     try:
+#         c = Converter()
+#         print(c.tex2ascii(expr))
+#     except Exception as e:
+#         print('WRONG!!!!!!!!!!')
+#         print(e)
+#
+#     print()
