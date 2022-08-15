@@ -15,32 +15,42 @@ class Converter(Tex2ASCIIMath):
 
     def _process_greek(self, expr):
         greek_dict = {'Α': r'\Alpha',   'α': r'\alpha',
-                 'Β': r'\Beta',    'β': r'\beta',
-                 'Γ': r'\Gamma',   'γ': r'\gamma',
-                 'Δ': r'\Delta',   'δ': r'\delta',
-                 'Ε': r'\Epsilon', 'ε': r'\epsilon',
-                 'Ζ': r'\Zeta',    'ζ': r'\zeta',
-                 'Η': r'\Eta',     'η': r'\eta',
-                 'Θ': r'\Theta',   'θ': r'\theta',
-                 'Ι': r'\Iota',    'ι': r'\iota',
-                 'Κ': r'\Kappa',   'κ': r'\kappa',
-                 'Λ': r'\Lambda',  'λ': r'\lambda',
-                 'Μ': r'\Mu',      'μ': r'\mu',
-                 'Ν': r'\Nu',      'ν': r'\nu',
-                 'Ξ': r'\Xi',      'ξ': r'\xi',
-                 'Ο': r'\Omicron', 'ο': r'\omicron',
-                 'Π': r'\Pi',      'π': r'\pi',
-                 'Ρ': r'\Rho',     'ρ': r'\rho',
-                 'Σ': r'\Sigma',   'σ': r'\sigma',   'ς': r'\sigma',
-                 'Τ': r'\Tau',     'τ': r'\tau',
-                 'Υ': r'\Upsilon', 'υ': r'\upsilon',
-                 'Φ': r'\Phi',     'φ': r'\phi',
-                 'Χ': r'\Chi',     'χ': r'\chi',
-                 'Ψ': r'\Psi',     'ψ': r'\psi',
-                 'Ω': r'\Omega',   'ω': r'\omega'}
+                      'Β': r'\Beta',    'β': r'\beta',
+                      'Γ': r'\Gamma',   'γ': r'\gamma',
+                      'Δ': r'\Delta',   'δ': r'\delta',
+                      'Ε': r'\Epsilon', 'ε': r'\epsilon',
+                      'Ζ': r'\Zeta',    'ζ': r'\zeta',
+                      'Η': r'\Eta',     'η': r'\eta',
+                      'Θ': r'\Theta',   'θ': r'\theta',
+                      'Ι': r'\Iota',    'ι': r'\iota',
+                      'Κ': r'\Kappa',   'κ': r'\kappa',
+                      'Λ': r'\Lambda',  'λ': r'\lambda',
+                      'Μ': r'\Mu',      'μ': r'\mu',
+                      'Ν': r'\Nu',      'ν': r'\nu',
+                      'Ξ': r'\Xi',      'ξ': r'\xi',
+                      'Ο': r'\Omicron', 'ο': r'\omicron',
+                      'Π': r'\Pi',      'π': r'\pi',
+                      'Ρ': r'\Rho',     'ρ': r'\rho',
+                      'Σ': r'\Sigma',   'σ': r'\sigma',   'ς': r'\sigma',
+                      'Τ': r'\Tau',     'τ': r'\tau',
+                      'Υ': r'\Upsilon', 'υ': r'\upsilon',
+                      'Φ': r'\Phi',     'φ': r'\phi',
+                      'Χ': r'\Chi',     'χ': r'\chi',
+                      'Ψ': r'\Psi',     'ψ': r'\psi',
+                      'Ω': r'\Omega',   'ω': r'\omega'}
 
         for greek in greek_dict:
             expr = expr.replace(greek, greek_dict[greek])
+
+        return expr
+
+
+    def _process_signs(self, expr):
+        # expr = expr.replace(r'\%', 'xxxxx')
+        expr = expr.replace(r'\stackrel{‾}', r'\overline')
+        expr = expr.replace(r'\mathit', r'\mathrm')
+        # expr = expr.replace(r'\mathrm{⁰}', r'^{\circ}')
+        # expr = expr.replace(r'\prime', 'xxxxx')
 
         return expr
 
@@ -73,7 +83,7 @@ class Converter(Tex2ASCIIMath):
 
 
     def _mml2tex_post(self, expr):
-        return self._process_greek(self._remove_phantom(expr))
+        return self._process_signs(self._process_greek(self._remove_phantom(expr)))
 
 
     def _tex2ascii_post(self, expr):

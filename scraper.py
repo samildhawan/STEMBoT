@@ -29,7 +29,7 @@ class Scraper:
 
 
     def _is_expr(self, expr):
-        signs = ['=', '<', '>', '≠', '≤', '≥', r'\le', r'\leq', r'\leqq', r'\leqslant', r'\ge', r'\geq', r'\geqq', r'\geqslant']
+        signs = ['=', '<', '>', '≠', '≤', '≥', r'\le ', r'\leq ', r'\leqq ', r'\leqslant ', r'\ge ', r'\geq ', r'\geqq ', r'\geqslant ']
         for sign in signs:
             if sign in expr:
                 return True
@@ -58,7 +58,7 @@ class Scraper:
 
         # wait
         try:
-            wait = WebDriverWait(driver, timeout=10)
+            wait = WebDriverWait(driver, timeout=3)
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#MathJax-Element-1-Frame")))
         except Exception as e:
             print('Timeout.')
@@ -105,8 +105,11 @@ class Scraper:
                 tex_expr = self.converter.mml2tex(mathml_expr)
                 if self._is_expr(tex_expr):
                     self.info['mathml_exprs'].append(mathml_expr)
+                    print(tex_expr)
                     self.info['tex_exprs'].append(tex_expr)
-                    self.info['ascii_exprs'].append(self.converter.tex2ascii(tex_expr))
+                    ascii_expr = self.converter.tex2ascii(tex_expr)
+                    print(ascii_expr)
+                    self.info['ascii_exprs'].append(ascii_expr)
         else:
             self.info['mathml_exprs'] = None
             self.info['tex_exprs'] = None
@@ -143,15 +146,15 @@ class Scraper:
             f.write('Authors: {}\n'.format(', '.join(self.get_authors())))
             f.write('URL: {}\n'.format(self.url))
 
-            f.write('Math Expressions in MathML: \n')
+            f.write('\nMath Expressions in MathML: \n')
             for expr in self.get_mathml_exprs():
                 f.write('{}\n'.format(expr))
 
-            f.write('Math Expressions in TeX: \n')
+            f.write('\nMath Expressions in TeX: \n')
             for expr in self.get_tex_exprs():
                 f.write('{}\n'.format(expr))
 
-            f.write('Math Expressions in ASCII: \n')
+            f.write('\nMath Expressions in ASCII: \n')
             for expr in self.get_ascii_exprs():
                 f.write('{}\n'.format(expr))
 
@@ -165,7 +168,7 @@ class Scraper:
 
 
 
-scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0749641918304856',
+scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0301679X21000827',
                   usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
 
 scraper.parse()
@@ -192,3 +195,19 @@ print(scraper.scrape())
 #         print(e)
 #
 #     print()
+
+# tex_exprs = scraper.get_tex_exprs()
+# ascii_exprs = scraper.get_ascii_exprs()
+# for idx in range(len(tex_exprs)):
+#     print('{}. TeX: {}'.format(idx, tex_exprs[idx]))
+#     print('ASCII: {}'.format(ascii_exprs[idx]))
+
+# with open('paper_url.txt', 'r', encoding='utf-8') as f:
+#     urls = f.readlines()
+#     for url in urls:
+#         print(url[:-1])
+#         scraper = Scraper(url=url[:-1],
+#                           usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
+#
+#         scraper.parse()
+#         scraper.scrape()
