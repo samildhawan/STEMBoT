@@ -1,4 +1,5 @@
 import os
+import re
 from lxml import etree
 from lxml.builder import unicode
 from py_asciimath.translator.translator import Tex2ASCIIMath
@@ -7,10 +8,6 @@ from py_asciimath.translator.translator import Tex2ASCIIMath
 class Converter(Tex2ASCIIMath):
     def __init__(self):
         super().__init__()
-
-
-    def _remove_phantom(self, expr):
-        return expr.replace(r'\phantom{\rule{0.25em}{0ex}}', '')
 
 
     def _process_greek(self, expr):
@@ -46,12 +43,9 @@ class Converter(Tex2ASCIIMath):
 
 
     def _process_signs(self, expr):
-        # expr = expr.replace(r'\%', 'xxxxx')
+        expr = expr.replace(r'\phantom{\rule{0.25em}{0ex}}', '')
         expr = expr.replace(r'\stackrel{‾}', r'\overline')
-        expr = expr.replace(r'\mathit', r'\mathrm')
-        # expr = expr.replace(r'\mathrm{⁰}', r'^{\circ}')
-        # expr = expr.replace(r'\prime', 'xxxxx')
-
+        expr = expr.replace(r'\displaystyle', '')
         return expr
 
 
@@ -83,11 +77,11 @@ class Converter(Tex2ASCIIMath):
 
 
     def _mml2tex_post(self, expr):
-        return self._process_signs(self._process_greek(self._remove_phantom(expr)))
+        return self._process_signs(self._process_greek(expr))
 
 
     def _tex2ascii_post(self, expr):
-        return self._process_frac(self._process_division(expr))
+        return self._process_frac(expr)
 
 
     def mml2tex(self, expr):
@@ -105,3 +99,156 @@ class Converter(Tex2ASCIIMath):
         ascii = self.translate(expr)
         # print(ascii)
         return self._tex2ascii_post(ascii)
+
+
+    def ascii2python(self, expr):
+        def repl_func_1(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return x.replace(' ', '')
+
+        def repl_func_2(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            x = x.replace(' ', '')
+            try:
+                float(x[2:-1])
+            except ValueError:
+                return x
+
+            return ' ** ' + x[1:]
+
+        def repl_func_3(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return x[4:].replace(' ', '')
+
+        def repl_func_4(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            if '-' in x:
+                return x
+            return x[1:-1]
+
+        def repl_func_5(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return 'np.' + x[:3] + x[4:]
+
+        def repl_func_6(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return 'np.' + x[:3] + '(' + x[4:] + ')'
+
+        # remove spaces in _(?)
+        pattern = '_\(.*?\)'
+        expr = re.sub(pattern, repl_func_1, expr)
+
+        # remove spaces in ^(?), replace ^ with ** if number
+        pattern = '\^\(.*?\)'
+        expr = re.sub(pattern, repl_func_2, expr)
+
+        # remove text and spaces in text(?)
+        pattern = 'text\(.*?\)'
+        expr = re.sub(pattern, repl_func_3, expr)
+
+        # remove redundant brackets
+        pattern = '\(\S*?\)'
+        expr = re.sub(pattern, repl_func_4, expr)
+
+        while True:
+            expr_new = re.sub(pattern, repl_func_4, expr)
+            if expr_new == expr:
+                break
+            expr = expr_new
+
+        # replace sin (?) with np.sin(?)
+        pattern = '(sin|cos|tan|exp)\s\(.*?\)'
+        expr = re.sub(pattern, repl_func_5, expr)
+
+        # replace sin ? with np.sin(?)
+        pattern = '(sin|cos|tan|exp)\s\S*'
+        expr = re.sub(pattern, repl_func_6, expr)
+
+        # replace sqrt() with np.sqrt()
+        expr = expr.replace('sqrt(', 'np.sqrt(')
+
+        # replace lambda with lambda_
+        expr = expr.replace('lambda', 'lambda_')
+
+        operators = ['+', '-', '*', '/', '=', '>', '<']
+
+        expr_list = expr.split(' = ')
+        left_expr = expr_list[0]
+        right_expr = expr_list[1].split(' ')
+
+        left_expr = left_expr.replace(' ', '')
+        # left_expr = left_expr.replace('(', '')
+        # left_expr = left_expr.replace(')', '')
+
+        i = 0
+        while i < len(right_expr) - 1:
+            left_elem = True
+            right_elem = True
+            for o in operators:
+                if o in right_expr[i]:
+                    left_elem = False
+                if o in right_expr[i + 1] and '(-' not in right_expr[i+1]:
+                    right_elem = False
+
+            if left_elem and right_elem:
+                right_expr.insert(i + 1, '*')
+                i += 1
+
+            i += 1
+
+        expr_final = left_expr + ' = ' + ' '.join(right_expr)
+        return expr_final
+
+
+    def html2python(self, expr):
+        expr = expr.replace('<em>', '')
+        expr = expr.replace('</em>', '')
+
+        def repl_func_1(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return '_' + '(' + x[5:-6] + ')'
+
+        def repl_func_2(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return '^' + '(' + x[5:-6] + ')'
+
+        # replace <sub>?</sub> with _(?)
+        pattern = '<sub>.*?</sub>'
+        expr = re.sub(pattern, repl_func_1, expr)
+
+        # replace <sup>?</sup> with _(?)
+        pattern = '<sup>.*?</sup>'
+        expr = re.sub(pattern, repl_func_2, expr)
+
+        return expr
+
+    def name_post(self, expr):
+        expr = self.html2python(expr)
+        expr = self._process_greek(expr)
+        # expr = expr.replace('\\', '')
+        # expr = expr.replace('(', '')
+        # expr = expr.replace(')', '')
+        # expr = expr.replace(' ', '')
+        expr = expr.replace('lambda', 'lambda_')
+        expr = ''.join(ch for ch in expr if ch.isalnum() or ch == '_')
+        return expr
+
+
+    def unit_post(self, expr):
+        return self.html2python(expr)

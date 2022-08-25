@@ -1,6 +1,6 @@
+import bs4
 import os
 import re
-from bs4 import BeautifulSoup
 from collections import OrderedDict
 from converter import Converter
 from selenium import webdriver
@@ -22,9 +22,11 @@ class Scraper:
             'title': None,
             'authors': [],
             'url': url,
+            'var_dict': {},
             'mathml_exprs': [],
             'tex_exprs': [],
-            'ascii_exprs': []
+            'ascii_exprs': [],
+            'python_exprs': []
         })
 
 
@@ -58,7 +60,7 @@ class Scraper:
 
         # wait
         try:
-            wait = WebDriverWait(driver, timeout=3)
+            wait = WebDriverWait(driver, timeout=5)
             wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#MathJax-Element-1-Frame")))
         except Exception as e:
             print('Timeout.')
@@ -67,7 +69,7 @@ class Scraper:
 
         driver.quit()
 
-        self.soup = BeautifulSoup(source, "html.parser")
+        self.soup = bs4.BeautifulSoup(source, "html.parser")
 
 
     def _scrape_title(self):
@@ -81,15 +83,69 @@ class Scraper:
         if not self.soup:
             raise NameError('The url is not parsed.')
 
-        authors_first = self.soup.find("div", {"class": "AuthorGroups"}).findAll("span", {"class": "given-name"})
-        authors_last = self.soup.find("div", {"class": "AuthorGroups"}).findAll("span", {"class": "surname"})
+        authors_first = self.soup.find('div', {'class': 'AuthorGroups'}).find_all('span', {'class': 'given-name'})
+        authors_last = self.soup.find('div', {'class': 'AuthorGroups'}).find_all('span', {'class': 'surname'})
         total_authors = len(authors_first)
 
         if total_authors:
             for i in range(total_authors):
                 self.info['authors'].append('{fn} {ln}'.format(fn=authors_first[i].contents[0], ln=authors_last[i].contents[0]))
         else:
-            self.info['authors'] = None
+            self.info['authors'].append('Unknown')
+
+
+    def _scrape_table(self):
+        tables = self.soup.find_all('table')
+        for table in tables:
+            variables = [variable.contents for variable in table.thead.tr.find_all('th')]
+            values = [value.contents[0] for value in table.tbody.tr.find_all('td')]
+
+            # print(variables)
+            # print(values)
+
+            for i in range(len(variables)):
+                try:
+                    float(values[i])
+                except ValueError:
+                    continue
+
+                # name, unit, value = '', '', float(values[i])
+
+                if isinstance(variables[i][0], bs4.element.Tag):
+                    # replace mathml with python
+                    mathml = variables[i][0].find('script', attrs={'id': re.compile(r'^MathJax')})
+                    # print(mathml)
+                    if mathml:
+                        mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + mathml.contents[0][6:]
+                        tex_expr = self.converter.mml2tex(mathml_expr)
+                        ascii_expr = self.converter.tex2ascii(tex_expr)
+                        # python_expr = self.converter.ascii2python(ascii_expr)
+                        variables[i][0] = ascii_expr
+
+                variables[i] = [str(v) for v in variables[i]]
+
+                expr = ''.join(variables[i])
+
+                # separate units
+                if expr[-1] == ')':
+                    idx = expr.rfind(' (')
+                    if idx <= 0:
+                        name = expr
+                        unit = 'Unknown'
+                    else:
+                        name = expr[:idx]
+                        unit = expr[idx+1:]
+                else:
+                    name = expr
+                    unit = 'Unknown'
+
+                name = self.converter.name_post(name)
+                unit = self.converter.unit_post(unit)
+
+                self.info['var_dict'][' '.join([name, unit])] = float(values[i])
+
+            # print(variables)
+            # print(values)
 
 
     def _scrape_exprs(self):
@@ -101,19 +157,23 @@ class Scraper:
 
         if exprs:
             for expr in exprs:
-                mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + expr.string[6:]
+                mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + expr.contents[0][6:]
                 tex_expr = self.converter.mml2tex(mathml_expr)
                 if self._is_expr(tex_expr):
                     self.info['mathml_exprs'].append(mathml_expr)
-                    print(tex_expr)
+                    # print('TeX: {}'.format(tex_expr))
                     self.info['tex_exprs'].append(tex_expr)
                     ascii_expr = self.converter.tex2ascii(tex_expr)
-                    print(ascii_expr)
+                    # print('ASCII: {}'.format(ascii_expr))
                     self.info['ascii_exprs'].append(ascii_expr)
+                    python_expr = self.converter.ascii2python(ascii_expr)
+                    # print('Python: {}'.format(python_expr))
+                    self.info['python_exprs'].append(python_expr)
         else:
             self.info['mathml_exprs'] = None
             self.info['tex_exprs'] = None
             self.info['ascii_exprs'] = None
+            self.info['python_exprs'] = None
 
 
     def get_title(self):
@@ -122,6 +182,10 @@ class Scraper:
 
     def get_authors(self):
         return self.info['authors']
+
+
+    def get_var_dict(self):
+        return self.info['var_dict']
 
 
     def get_mathml_exprs(self):
@@ -134,6 +198,10 @@ class Scraper:
 
     def get_ascii_exprs(self):
         return self.info['ascii_exprs']
+
+
+    def get_python_exprs(self):
+        return self.info['python_exprs']
 
 
     def _generate_txt(self):
@@ -158,17 +226,46 @@ class Scraper:
             for expr in self.get_ascii_exprs():
                 f.write('{}\n'.format(expr))
 
+            f.write('\nMath Expressions in Python: \n')
+            for expr in self.get_python_exprs():
+                f.write('{}\n'.format(expr))
+
+
+    def _generate_python(self):
+        paper_id = self.url.split('/')[-1]
+        if not os.path.exists('scraped_python'):
+            os.mkdir('scraped_python')
+
+        with open('scraped_python\\{}.py'.format(paper_id), 'w', encoding='utf-8') as f:
+            # import libraries
+            f.write('import numpy as np\n')
+            f.write('\n')
+
+            # write variables
+            for var in self.get_var_dict():
+                temp = var.split(' ')
+                name = temp[0]
+                unit = ' '.join(temp[1:])
+                f.write('# {} (unit={})\n'.format(name, unit))
+                f.write('{} = {}\n'.format(name, self.get_var_dict()[var]))
+            f.write('\n')
+
+            for expr in self.get_python_exprs():
+                f.write('{}\n'.format(expr))
+
 
     def scrape(self):
+        self._scrape_table()
         self._scrape_title()
         self._scrape_authors()
         self._scrape_exprs()
         self._generate_txt()
+        self._generate_python()
         return self.info
 
 
 
-scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0301679X21000827',
+scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0924013617301334',
                   usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
 
 scraper.parse()
@@ -182,7 +279,10 @@ scraper.parse()
 # scraper.scrape_exprs()
 # scraper.get_exprs()
 
-print(scraper.scrape())
+scraper.scrape()
+
+print(scraper.get_var_dict())
+print(scraper.get_python_exprs())
 
 # for idx, expr in enumerate(scraper.get_tex_exprs()):
 #     print(idx, expr)
