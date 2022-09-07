@@ -43,15 +43,22 @@ class Converter(Tex2ASCIIMath):
 
 
     def _process_signs(self, expr):
+        expr = expr.replace('|', r'\vert')
         expr = expr.replace(r'\phantom{\rule{0.25em}{0ex}}', '')
         expr = expr.replace(r'\stackrel{‾}', r'\overline')
         expr = expr.replace(r'\displaystyle', '')
         return expr
 
 
-    def _process_division(self, expr):
-        return expr.replace('//', '/')
+    def _split_array(self, expr):
+        expr_list = [expr]
+        if r'\begin{array}' in expr:
+            expr_list = expr.split(' & ')[1:]
+            for i, expr in enumerate(expr_list):
+                idx = expr.find('\hfill')
+                expr_list[i] = expr[:idx]
 
+        return expr_list
 
     def _process_frac(self, expr):
         idx = 0
@@ -65,7 +72,7 @@ class Converter(Tex2ASCIIMath):
                 expr = expr.replace('frac', '')
                 return expr
 
-            while lbrackets > rbrackets or lbrackets == 0:
+            while (lbrackets > rbrackets or lbrackets == 0) and idx < len(expr):
                 if expr[idx] == '(':
                     lbrackets += 1
                 elif expr[idx] == ')':
@@ -76,11 +83,48 @@ class Converter(Tex2ASCIIMath):
             expr = expr[:idx] + ' / ' + expr[idx:]
 
 
+    def _process_divide(self, expr):
+        idx = 0
+
+        while True:
+            idx = expr.find('//', idx)
+            lbrackets = 0
+            rbrackets = 0
+
+            if idx == -1:
+                expr = expr.replace('//', ' / (')
+                return expr
+
+            while lbrackets >= rbrackets and idx < len(expr):
+                if expr[idx] == '(':
+                    lbrackets += 1
+                elif expr[idx] == ')':
+                    rbrackets += 1
+
+                idx += 1
+
+
+            if idx >= len(expr):
+                expr += ')'
+            else:
+                expr = expr[:idx] + ')' + expr[idx:]
+
+
     def _mml2tex_post(self, expr):
-        return self._process_signs(self._process_greek(expr))
+        expr = expr.replace('{(}', '(')
+        expr = expr.replace('{)}', ')')
+        expr = self._process_greek(expr)
+        expr = self._process_signs(expr)
+        expr = self._split_array(expr)
+        return expr
 
 
     def _tex2ascii_post(self, expr):
+        if expr.endswith(',') or expr.endswith('text(,)'):
+            expr = expr.rstrip('text(,)')
+        elif expr.endswith('.') or expr.endswith('text(.)'):
+            expr = expr.rstrip('text(.)')
+        expr = expr.rstrip()
         return self._process_frac(expr)
 
 
@@ -113,11 +157,10 @@ class Converter(Tex2ASCIIMath):
             x = matched.group(0)
             # print(x)
             x = x.replace(' ', '')
-            try:
-                float(x[2:-1])
-            except ValueError:
-                return x
-
+            # try:
+            #     float(x[2:-1])
+            # except ValueError:
+            #     return x
             return ' ** ' + x[1:]
 
         def repl_func_3(matched):
@@ -130,8 +173,6 @@ class Converter(Tex2ASCIIMath):
             # if matched:
             x = matched.group(0)
             # print(x)
-            if '-' in x:
-                return x
             return x[1:-1]
 
         def repl_func_5(matched):
@@ -146,11 +187,17 @@ class Converter(Tex2ASCIIMath):
             # print(x)
             return 'np.' + x[:3] + '(' + x[4:] + ')'
 
+        def repl_func_7(matched):
+            # if matched:
+            x = matched.group(0)
+            # print(x)
+            return 'abs(' + x[2:-2] + ')'
+
         # remove spaces in _(?)
         pattern = '_\(.*?\)'
         expr = re.sub(pattern, repl_func_1, expr)
 
-        # remove spaces in ^(?), replace ^ with ** if number
+        # remove spaces in ^(?), replace ^ with **
         pattern = '\^\(.*?\)'
         expr = re.sub(pattern, repl_func_2, expr)
 
@@ -159,7 +206,7 @@ class Converter(Tex2ASCIIMath):
         expr = re.sub(pattern, repl_func_3, expr)
 
         # remove redundant brackets
-        pattern = '\(\S*?\)'
+        pattern = '\(\w*?\)'
         expr = re.sub(pattern, repl_func_4, expr)
 
         while True:
@@ -167,6 +214,9 @@ class Converter(Tex2ASCIIMath):
             if expr_new == expr:
                 break
             expr = expr_new
+
+        pattern = '\(\S\)'
+        expr = re.sub(pattern, repl_func_4, expr)
 
         # replace sin (?) with np.sin(?)
         pattern = '(sin|cos|tan|exp)\s\(.*?\)'
@@ -176,13 +226,19 @@ class Converter(Tex2ASCIIMath):
         pattern = '(sin|cos|tan|exp)\s\S*'
         expr = re.sub(pattern, repl_func_6, expr)
 
+        # replace |:?:| with abs(?)
+        pattern = '\|\:.*?\:\|'
+        expr = re.sub(pattern, repl_func_7, expr)
+
         # replace sqrt() with np.sqrt()
         expr = expr.replace('sqrt(', 'np.sqrt(')
 
         # replace lambda with lambda_
         expr = expr.replace('lambda', 'lambda_')
 
-        operators = ['+', '-', '*', '/', '=', '>', '<']
+        expr = self._process_divide(expr)
+
+        operators = ['+', '-', '*', '/', '=', '>', '<', ',']
 
         expr_list = expr.split(' = ')
         left_expr = expr_list[0]
@@ -239,6 +295,7 @@ class Converter(Tex2ASCIIMath):
         return expr
 
     def name_post(self, expr):
+        # print('Before: {}'.format(expr))
         expr = self.html2python(expr)
         expr = self._process_greek(expr)
         # expr = expr.replace('\\', '')
@@ -247,6 +304,7 @@ class Converter(Tex2ASCIIMath):
         # expr = expr.replace(' ', '')
         expr = expr.replace('lambda', 'lambda_')
         expr = ''.join(ch for ch in expr if ch.isalnum() or ch == '_')
+        # print('After: {}'.format(expr))
         return expr
 
 

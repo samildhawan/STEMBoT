@@ -1,6 +1,7 @@
 import bs4
 import os
 import re
+import sys
 from collections import OrderedDict
 from converter import Converter
 from selenium import webdriver
@@ -37,15 +38,6 @@ class Scraper:
                 return True
 
         return False
-
-
-    # def _mml2tex(self, expr):
-    #     xslt_file = os.path.join('mml2tex', 'mmltex.xsl')
-    #     dom = etree.fromstring(expr)
-    #     xslt = etree.parse(xslt_file)
-    #     transform = etree.XSLT(xslt)
-    #     newdom = transform(dom)
-    #     return unicode(newdom)
 
 
     def parse(self):
@@ -97,6 +89,7 @@ class Scraper:
     def _scrape_table(self):
         tables = self.soup.find_all('table')
         for table in tables:
+            # print(table)
             variables = [variable.contents for variable in table.thead.tr.find_all('th')]
             values = [value.contents[0] for value in table.tbody.tr.find_all('td')]
 
@@ -110,6 +103,7 @@ class Scraper:
                     continue
 
                 # name, unit, value = '', '', float(values[i])
+                # print(variables[i])
 
                 if isinstance(variables[i][0], bs4.element.Tag):
                     # replace mathml with python
@@ -117,7 +111,7 @@ class Scraper:
                     # print(mathml)
                     if mathml:
                         mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + mathml.contents[0][6:]
-                        tex_expr = self.converter.mml2tex(mathml_expr)
+                        tex_expr = self.converter.mml2tex(mathml_expr)[0]
                         ascii_expr = self.converter.tex2ascii(tex_expr)
                         # python_expr = self.converter.ascii2python(ascii_expr)
                         variables[i][0] = ascii_expr
@@ -146,6 +140,7 @@ class Scraper:
 
             # print(variables)
             # print(values)
+            # print(self.info['var_dict'])
 
 
     def _scrape_exprs(self):
@@ -158,17 +153,20 @@ class Scraper:
         if exprs:
             for expr in exprs:
                 mathml_expr = '<math xmlns="http://www.w3.org/1998/Math/MathML">' + expr.contents[0][6:]
-                tex_expr = self.converter.mml2tex(mathml_expr)
-                if self._is_expr(tex_expr):
-                    self.info['mathml_exprs'].append(mathml_expr)
-                    # print('TeX: {}'.format(tex_expr))
-                    self.info['tex_exprs'].append(tex_expr)
-                    ascii_expr = self.converter.tex2ascii(tex_expr)
-                    # print('ASCII: {}'.format(ascii_expr))
-                    self.info['ascii_exprs'].append(ascii_expr)
-                    python_expr = self.converter.ascii2python(ascii_expr)
-                    # print('Python: {}'.format(python_expr))
-                    self.info['python_exprs'].append(python_expr)
+                tex_exprs = self.converter.mml2tex(mathml_expr)
+                for tex_expr in tex_exprs:
+                    # print(tex_expr)
+                    # print(self._is_expr(tex_expr))
+                    if self._is_expr(tex_expr):
+                        self.info['mathml_exprs'].append(mathml_expr)
+                        print('TeX: {}'.format(tex_expr))
+                        self.info['tex_exprs'].append(tex_expr)
+                        ascii_expr = self.converter.tex2ascii(tex_expr)
+                        print('ASCII: {}'.format(ascii_expr))
+                        self.info['ascii_exprs'].append(ascii_expr)
+                        python_expr = self.converter.ascii2python(ascii_expr)
+                        print('Python: {}\n'.format(python_expr))
+                        self.info['python_exprs'].append(python_expr)
         else:
             self.info['mathml_exprs'] = None
             self.info['tex_exprs'] = None
@@ -236,22 +234,93 @@ class Scraper:
         if not os.path.exists('scraped_python'):
             os.mkdir('scraped_python')
 
+        file_data = []
+        with open('template.py', 'r', encoding='utf-8') as f:
+            for line in f.readlines():
+                file_data.append(line)
+
         with open('scraped_python\\{}.py'.format(paper_id), 'w', encoding='utf-8') as f:
-            # import libraries
-            f.write('import numpy as np\n')
-            f.write('\n')
+            for line in file_data:
+                # print(repr(line))
+                f.write(line)
 
-            # write variables
-            for var in self.get_var_dict():
-                temp = var.split(' ')
-                name = temp[0]
-                unit = ' '.join(temp[1:])
-                f.write('# {} (unit={})\n'.format(name, unit))
-                f.write('{} = {}\n'.format(name, self.get_var_dict()[var]))
-            f.write('\n')
+                # if 'All libraries go here' in line:
+                #     # import libraries
+                #     f.write('import numpy as np\n')
+                #     f.write('import pandas as pd\n')
+                #     f.write('rom matplotlib import pyplot as plt\n')
+                #     f.write('from sympy import Symbol, Eq, solve\n')
+                #     f.write('\n')
 
-            for expr in self.get_python_exprs():
-                f.write('{}\n'.format(expr))
+                if 'All equation parameters go here' in line:
+                    # write variables
+                    for var in self.get_var_dict():
+                        temp = var.split(' ')
+                        name = temp[0]
+                        unit = ' '.join(temp[1:])
+                        f.write('# {} (unit={})\n'.format(name, unit))
+                        f.write('{} = {}\n'.format(name, self.get_var_dict()[var]))
+                    f.write('\n')
+
+                    for expr in self.get_python_exprs():
+                        var = expr.split(' = ')[0]
+                        f.write('{} = Symbol("{}")\n'.format(var, var))
+                    # f.write('\n')
+
+                elif 'All equations go here' in line:
+                    # write expressions
+                    f.write('    exprs = [\n')
+                    for expr in self.get_python_exprs():
+                        left, right = expr.split(' = ')
+                        f.write('        Eq({}, {}),\n'.format(left, right))
+                    f.write('    ]\n')
+                    # f.write('\n')
+
+                    # f.write('    sol = solve(exprs)\n')
+                    # f.write('\n')
+                    #
+                    # f.write('    for key, val in sol.items():\n')
+                    # f.write('        exec("{} = {}".format(key, val))\n')
+
+
+    def _generate_python_test(self):
+        paper_id = self.url.split('/')[-1]
+        if not os.path.exists('scraped_python'):
+            os.mkdir('scraped_python')
+
+        with open('scraped_python\\{}_test.py'.format(paper_id), 'w', encoding='utf-8') as f:
+                # import libraries
+                f.write('import numpy as np\n')
+                f.write('from sympy import Symbol, Eq, solve\n')
+                f.write('\n')
+
+                # write variables
+                for var in self.get_var_dict():
+                    temp = var.split(' ')
+                    name = temp[0]
+                    unit = ' '.join(temp[1:])
+                    f.write('# {} (unit={})\n'.format(name, unit))
+                    f.write('{} = {}\n'.format(name, self.get_var_dict()[var]))
+                f.write('\n')
+
+                # write expressions
+                for expr in self.get_python_exprs():
+                    var = expr.split(' = ')[0]
+                    f.write('{} = Symbol("{}")\n'.format(var, var))
+                f.write('\n')
+
+                f.write('exprs = [\n')
+                for expr in self.get_python_exprs():
+                    left, right = expr.split(' = ')
+                    f.write('    Eq({}, {}),\n'.format(left, right))
+                f.write(']\n')
+                f.write('\n')
+
+                f.write('sol = solve(exprs)[0]\n')
+                f.write('\n')
+
+                f.write('for key, val in sol.items():\n')
+                f.write('    exec("{} = {}".format(key, val))\n')
 
 
     def scrape(self):
@@ -261,14 +330,15 @@ class Scraper:
         self._scrape_exprs()
         self._generate_txt()
         self._generate_python()
+        self._generate_python_test()
         return self.info
 
 
 
-scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0924013617301334',
-                  usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
+# scraper = Scraper(url='https://www.sciencedirect.com/science/article/pii/S0749641904001664',
+#                   usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
 
-scraper.parse()
+# scraper.parse()
 
 # scraper.scrape_title()
 # scraper.get_title()
@@ -279,35 +349,22 @@ scraper.parse()
 # scraper.scrape_exprs()
 # scraper.get_exprs()
 
-scraper.scrape()
+# scraper.scrape()
 
-print(scraper.get_var_dict())
-print(scraper.get_python_exprs())
+# print(scraper.get_var_dict())
+# print(scraper.get_python_exprs())
 
-# for idx, expr in enumerate(scraper.get_tex_exprs()):
-#     print(idx, expr)
-#
-#     try:
-#         c = Converter()
-#         print(c.tex2ascii(expr))
-#     except Exception as e:
-#         print('WRONG!!!!!!!!!!')
-#         print(e)
-#
-#     print()
 
-# tex_exprs = scraper.get_tex_exprs()
-# ascii_exprs = scraper.get_ascii_exprs()
-# for idx in range(len(tex_exprs)):
-#     print('{}. TeX: {}'.format(idx, tex_exprs[idx]))
-#     print('ASCII: {}'.format(ascii_exprs[idx]))
+with open('paper_url.txt', 'r', encoding='utf-8') as f:
+    urls = f.readlines()
+    for url in urls:
+        print(url.strip('\n'))
+        scraper = Scraper(url=url.strip('\n'),
+                          usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
 
-# with open('paper_url.txt', 'r', encoding='utf-8') as f:
-#     urls = f.readlines()
-#     for url in urls:
-#         print(url[:-1])
-#         scraper = Scraper(url=url[:-1],
-#                           usr_data_dir='C:\\Users\\Vincent\\AppData\\Local\\Google\\Chrome\\User Data')
-#
-#         scraper.parse()
-#         scraper.scrape()
+        scraper.parse()
+        print('Scraping {}: '.format(url[:-1]))
+        scraper.scrape()
+
+        print(scraper.get_var_dict())
+        print(scraper.get_python_exprs())
