@@ -1,15 +1,16 @@
-import bs4
 import os
 import re
-import sys
 from collections import OrderedDict
-from converter import Converter
+
+import bs4
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+
+from converter import Converter
 
 
 class Scraper:
@@ -89,12 +90,27 @@ class Scraper:
     def _scrape_table(self):
         tables = self.soup.find_all('table')
         for table in tables:
-            # print(table)
-            variables = [variable.contents for variable in table.thead.tr.find_all('th')]
-            values = [value.contents[0] for value in table.tbody.tr.find_all('td')]
+            print(table)
+            variables = [variable.contents for variable in table.thead.tr.find_all('th') if variable.contents]
+            values = []
+            trs = table.tbody.find_all('tr')
+
+            next = False
+            for tr in trs:
+                if next:
+                    variables += [variable.contents for variable in tr.find_all('td') if variable.contents]
+                    # print(variables)
+                    next = False
+                else:
+                    values += [value.contents[0] for value in tr.find_all('td') if value.contents]
+                    # print(values)
+                    next = True
 
             # print(variables)
             # print(values)
+
+            if len(variables) != len(values):
+                continue
 
             for i in range(len(variables)):
                 try:
@@ -136,7 +152,8 @@ class Scraper:
                 name = self.converter.name_post(name)
                 unit = self.converter.unit_post(unit)
 
-                self.info['var_dict'][' '.join([name, unit])] = float(values[i])
+                if not name[0].isdigit():
+                    self.info['var_dict'][' '.join([name, unit])] = float(values[i])
 
             # print(variables)
             # print(values)
@@ -148,6 +165,7 @@ class Scraper:
             raise NameError('The url is not parsed.')
 
         exprs = self.soup.find_all('script', attrs={'id': re.compile(r'^MathJax')})
+        var_list = [var.split(' ')[0] for var in self.get_var_dict()] + ['y']
         # tex2ascii = Tex2ASCIIMath()
 
         if exprs:
@@ -164,9 +182,10 @@ class Scraper:
                         ascii_expr = self.converter.tex2ascii(tex_expr)
                         print('ASCII: {}'.format(ascii_expr))
                         self.info['ascii_exprs'].append(ascii_expr)
-                        python_expr = self.converter.ascii2python(ascii_expr)
+                        python_expr = self.converter.ascii2python(ascii_expr, var_list)
                         print('Python: {}\n'.format(python_expr))
                         self.info['python_exprs'].append(python_expr)
+                        var_list.append(python_expr.split(' = ')[0])
         else:
             self.info['mathml_exprs'] = None
             self.info['tex_exprs'] = None

@@ -34,7 +34,7 @@ def plot_error_analysis(X, Y, Y_true):
 
 
 # All equation parameters go here
-delta = 1.5e-5
+# delta = 1.5e-5
 
 colomn_name = ['P', 'h']
 # df = pd.read_csv('figures\\cast_iron.csv', header=None, names=colomn_name)

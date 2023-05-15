@@ -1,0 +1,9 @@
+beautifulsoup4~=4.11.1
+selenium~=4.3.0
+numpy~=1.23.1
+pandas~=1.4.4
+matplotlib~=3.5.3
+sympy~=1.11
+tqdm~=4.64.0
+lxml~=4.9.1
+utils~=1.0.1

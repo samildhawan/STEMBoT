@@ -1,5 +1,6 @@
 import os
 import re
+
 from lxml import etree
 from lxml.builder import unicode
 from py_asciimath.translator.translator import Tex2ASCIIMath
@@ -145,7 +146,7 @@ class Converter(Tex2ASCIIMath):
         return self._tex2ascii_post(ascii)
 
 
-    def ascii2python(self, expr):
+    def ascii2python(self, expr, var_list):
         def repl_func_1(matched):
             # if matched:
             x = matched.group(0)
@@ -167,6 +168,10 @@ class Converter(Tex2ASCIIMath):
             # if matched:
             x = matched.group(0)
             # print(x)
+            vars = x[5:-1].split(' ')
+            exist = [var in var_list for var in vars]
+            if all(exist) and ''.join(vars) not in var_list:
+                return x[4:]
             return x[4:].replace(' ', '')
 
         def repl_func_4(matched):
