@@ -246,7 +246,9 @@ class Scraper:
             "\B<em>\w</em><sub><em>\w</em></sub> = <em>\w</em><sub><em>\w</em></sub>",
             exprs)
         custom_char_pattern = re.findall("\B<em>\w</em><sub>\w</sub> = [^,]*", exprs)
-        complete_list = explicit_variable + subscripted_variable + variable_with_subscript + complex_expression + custom_char_pattern
+        complete_list = explicit_variable + subscripted_variable + \
+                        variable_with_subscript + complex_expression + \
+                        custom_char_pattern
 
         # expression_pattern = variable_name
         full_list = []
@@ -290,7 +292,8 @@ class Scraper:
             "\B<em>\w</em><sub><em>\w</em></sub> is ",
             paragraphs)
         variable_with_subscript_constant = re.findall("\B<em>\w</em><sub>\w</sub> is ", paragraphs)
-        constants_name = ordinary_constant + subscripted_constant + variable_with_subscript_constant
+        constants_name = ordinary_constant + subscripted_constant +\
+                         variable_with_subscript_constant
         print(constants_name)
 
         # constants_mapping = {}
