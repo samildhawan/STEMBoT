@@ -15,7 +15,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from converter import Converter
 
 
-
 class Scraper:
     def __init__(self, url,
                  usr_data_dir='Users/samildhawan/Library/Application Support/Google/Chrome/User Data/Default'):
@@ -237,17 +236,17 @@ class Scraper:
         exprs = re.sub(r'\s', ' ', exprs)
         var_list = [var.split(' ')[0] for var in self.get_var_dict()] + ['y']
 
-        variable_name = re.findall("\B<em>\w</em> = \d+\.?\d*", exprs)
-        weird_name = re.findall(
+        explicit_variable = re.findall("\B<em>\w</em> = \d+\.?\d*", exprs)
+        subscripted_variable = re.findall(
             "\B<em>\w</em><sub><em>\w</em></sub> = <em>\w</em><sub>\w</sub>",
             exprs)
-        or_name = re.findall(
+        variable_with_subscript = re.findall(
             "\B<em>\w</em> = <em>\w</em><sub><em>\w</em></sub>", exprs)
-        other_name = re.findall(
+        complex_expression = re.findall(
             "\B<em>\w</em><sub><em>\w</em></sub> = <em>\w</em><sub><em>\w</em></sub>",
             exprs)
-        ok_name = re.findall("\B<em>\w</em><sub>\w</sub> = [^,]*", exprs)
-        complete_list = variable_name + weird_name + or_name + other_name + ok_name
+        custom_char_pattern = re.findall("\B<em>\w</em><sub>\w</sub> = [^,]*", exprs)
+        complete_list = explicit_variable + subscripted_variable + variable_with_subscript + complex_expression + custom_char_pattern
 
         # expression_pattern = variable_name
         full_list = []
@@ -275,6 +274,73 @@ class Scraper:
                 self.info['tex_exprs'] = None
                 self.info['ascii_exprs'] = None
                 self.info['python_exprs'] = None
+
+    def _scrape_scientific_constants(self):
+        """Extracts scientific constants defined in the paragraphs of the parsed
+        webpage"""
+
+        if not self.soup:
+            raise NameError('The url is not parsed.')
+        paragraphs = self.soup.select('p')
+        paragraphs = str(paragraphs)
+        paragraphs = re.sub(r'\s', ' ', paragraphs)
+        var_list = [var.split(' ')[0] for var in self.get_var_dict()] + ['y']
+        ordinary_constant = re.findall("\B<em>\w</em> is ", paragraphs)
+        subscripted_constant = re.findall(
+            "\B<em>\w</em><sub><em>\w</em></sub> is ",
+            paragraphs)
+        variable_with_subscript_constant = re.findall("\B<em>\w</em><sub>\w</sub> is ", paragraphs)
+        constants_name = ordinary_constant + subscripted_constant + variable_with_subscript_constant
+        print(constants_name)
+
+        # constants_mapping = {}
+        # for constant_name in constants_name:
+        #     clean = re.compile('<.*?>')
+        #     clean_name = re.sub(clean, '', constant_name)
+        #     print(clean_name)
+
+    def _substitute_values(self):
+        """Substitutes dictionary values in equations list.
+        Returns the list of equations with the dictionary values substituted.
+        """
+        updated_dict = {}
+        for key, value in self.info['var_dict'].items():
+            key = key.split()[0]  # Keep only the first word
+            updated_dict[key] = value
+        for index, equation in enumerate(self.info['python_exprs']):
+            for key, value in updated_dict.items():
+                equation = re.sub(r'(?<!\w){}(?!\w)'.format(key), str(value),
+                                  equation)
+            self.info['python_exprs'][index] = equation
+        return self.info['python_exprs']
+
+        # for index, equation in enumerate(equations):
+        #     for key, value in dictionary.items():
+        #         equation = re.sub(r'(?<!\w){}(?!\w)'.format(key), str(value),
+        #                           equation)
+        #     equations[index] = equation
+        # return equations
+
+    def particle_swarm_optimization(x):
+        """This function hasn't been complete and needs to be adapted for
+        the project. Function does a particle swarm optimization for
+        values/equations which have unknown quantities and attempts to return
+        accurate values for those values/equations.
+        """
+        k, K, n1, B, A, C, n2, E = x
+        ep, R, rho, sigma = 0, 0, 1e-20, 0
+        k, K, n1, B, A, C, n2, E = 21.5e6, 35e6, 5, 28.5e6, 0.28, 0.1, 1.8, 0.8e10
+
+        etotalrate = 1
+        ep = abs((sigma - R - k) / K) ** n1
+        R = 0.5 * B / (rho ** 0.5) * (
+                A * (1 - rho) * abs((sigma - R - k) / K) ** n1) - (
+                    C * (rho ** n2))
+        rho = (A * (1 - rho) * abs((sigma - R - k) / K) ** n1) - (
+                C * (rho ** n2))
+        sigma = E * (etotalrate - abs((sigma - R - k) / K) ** n1)
+
+        return ep, R, rho, sigma
 
     def get_title(self):
         """Returns the title of the webpage"""
